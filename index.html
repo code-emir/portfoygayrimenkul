@@ -1,19 +1,69 @@
-CREATE TABLE ilanlar (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  baslik TEXT,
-  kategori TEXT,
-  il TEXT,
-  ilce TEXT,
-  tam_adres TEXT,
-  fiyat NUMERIC,
-  gorsel_linkleri TEXT[],
-  ekleyen_personel_ad TEXT
-);
+import sqlite3
 
-CREATE TABLE personeller (
-  id uuid PRIMARY KEY,
-  ad_soyad TEXT,
-  email TEXT,
-  kayit_tarihi TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+class EMS_SaaS_Sistemi:
+    def __init__(self, db_adi="kurumsal_sistem.db"):
+        self.conn = sqlite3.connect(db_adi)
+        self.cursor = self.conn.cursor()
+        self.tablolari_olustur()
+
+    def tablolari_olustur(self):
+        # İşletmeler tablosu
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS isletmeler (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                isim TEXT NOT NULL,
+                kayit_tarihi TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Ürünler tablosu (isletme_id ile ayrıştırılmış)
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS urunler (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                isletme_id INTEGER,
+                urun_adi TEXT,
+                stok_miktari INTEGER,
+                fiyat REAL,
+                FOREIGN KEY (isletme_id) REFERENCES isletmeler(id)
+            )
+        ''')
+        self.conn.commit()
+
+    def urun_ekle(self, isletme_id, ad, stok, fiyat):
+        """Her ürün eklenirken mutlaka hangi işletmeye ait olduğu kaydedilir."""
+        query = "INSERT INTO urunler (isletme_id, urun_adi, stok_miktari, fiyat) VALUES (?, ?, ?, ?)"
+        self.cursor.execute(query, (isletme_id, ad, stok, fiyat))
+        self.conn.commit()
+        print(f"Sistem: '{ad}' ürünü {isletme_id} ID'li işletmeye eklendi.")
+
+    def urunleri_getir(self, isletme_id):
+        """
+        KRİTİK NOKTA: Veri karışıklığını önleyen filtreleme.
+        Sorgu asla 'SELECT * FROM urunler' şeklinde çıplak bırakılmaz.
+        """
+        query = "SELECT urun_adi, stok_miktari, fiyat FROM urunler WHERE isletme_id = ?"
+        self.cursor.execute(query, (isletme_id,))
+        return self.cursor.fetchall()
+
+# --- SİSTEMİ TEST EDELİM ---
+
+ems = EMS_SaaS_Sistemi()
+
+# 1. Senaryo: İki farklı işletme sisteme kaydoluyor
+# İşletme 1: Merkez Market (ID: 1)
+# İşletme 2: Teknik Servis (ID: 2)
+
+# 2. Senaryo: Her işletme kendi ürününü ekliyor
+ems.urun_ekle(1, "Süt", 50, 25.50)
+ems.urun_ekle(1, "Ekmek", 100, 10.00)
+ems.urun_ekle(2, "SSD Disk", 15, 1200.00)
+
+print("\n--- GÜVENLİK KONTROLÜ ---")
+
+# İşletme 1 giriş yaptığında sadece kendi mallarını görür:
+market_verisi = ems.urunleri_getir(1)
+print(f"Merkez Market Ürünleri: {market_verisi}")
+
+# İşletme 2 giriş yaptığında asla marketin sütünü/ekmeğini göremez:
+servis_verisi = ems.urunleri_getir(2)
+print(f"Teknik Servis Ürünleri: {servis_verisi}")

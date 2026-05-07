@@ -1,69 +1,239 @@
-import sqlite3
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emlak Portföy Yönetim Sistemi</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/browser-image-compression/2.0.2/browser-image-compression.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+        body { background-color: #f4f7fa; font-family: 'Inter', sans-serif; }
+        .akin-card { background: white; border-top: 5px solid #2563eb; border-radius: 12px; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1); }
+        .tab-btn { transition: all 0.3s; border-bottom: 3px solid transparent; }
+        .tab-active { border-bottom: 3px solid #2563eb; color: #2563eb; font-weight: 800; }
+        .staff-box { border-top: 5px solid #f59e0b !important; }
+    </style>
+</head>
+<body>
 
-class EMS_SaaS_Sistemi:
-    def __init__(self, db_adi="kurumsal_sistem.db"):
-        self.conn = sqlite3.connect(db_adi)
-        self.cursor = self.conn.cursor()
-        self.tablolari_olustur()
+<div id="app" class="min-h-screen">
+    <nav class="bg-white border-b p-4 flex justify-between items-center shadow-sm sticky top-0 z-50">
+        <div class="flex items-center gap-2">
+            <div class="bg-blue-600 text-white p-1.5 rounded font-black text-sm">EP</div>
+            <h1 class="text-lg font-extrabold text-gray-800 tracking-tighter">EMLAK<span class="text-blue-600">PRO</span></h1>
+        </div>
+        <div id="userInfo" class="hidden items-center gap-3">
+            <span id="userEmail" class="text-[10px] font-bold text-gray-400 bg-gray-50 px-2 py-1 rounded"></span>
+            <button onclick="logout()" class="text-red-500 text-xs font-black uppercase hover:underline">Çıkış</button>
+        </div>
+    </nav>
 
-    def tablolari_olustur(self):
-        # İşletmeler tablosu
-        self.cursor.execute('''
-            CREATE TABLE IF NOT EXISTS isletmeler (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                isim TEXT NOT NULL,
-                kayit_tarihi TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
+    <div id="authSection" class="max-w-md mx-auto mt-16 p-4">
+        <div class="akin-card overflow-hidden">
+            <div class="flex border-b">
+                <button id="loginTab" onclick="toggleAuth(true)" class="tab-btn flex-1 py-4 text-sm font-bold tab-active">GİRİŞ YAP</button>
+                <button id="regTab" onclick="toggleAuth(false)" class="tab-btn flex-1 py-4 text-sm font-bold text-gray-400">YENİ İŞLETME KAYDI</button>
+            </div>
+            <div class="p-8">
+                <div id="loginForm" class="space-y-4">
+                    <input type="email" id="email" placeholder="E-posta" class="w-full border-2 border-gray-100 p-3 rounded-xl outline-none focus:border-blue-600 transition">
+                    <input type="password" id="password" placeholder="Şifre veya 4 Haneli Kod" class="w-full border-2 border-gray-100 p-3 rounded-xl outline-none focus:border-blue-600 transition">
+                    <button onclick="login()" class="w-full bg-blue-600 text-white p-4 rounded-xl font-black shadow-lg shadow-blue-200 hover:bg-blue-700 transition">SİSTEME ERİŞİM SAĞLA</button>
+                </div>
+
+                <div id="registerForm" class="hidden space-y-4 text-center">
+                    <input type="text" id="regName" placeholder="İşletme Yetkilisi Ad Soyad" class="w-full border-2 border-gray-100 p-3 rounded-xl outline-none">
+                    <input type="email" id="regEmail" placeholder="Yönetici E-posta" class="w-full border-2 border-gray-100 p-3 rounded-xl outline-none">
+                    <input type="password" id="regPass" placeholder="Yönetici Şifresi Oluştur" class="w-full border-2 border-gray-100 p-3 rounded-xl outline-none">
+                    <button onclick="register()" class="w-full bg-green-600 text-white p-4 rounded-xl font-black shadow-lg shadow-green-100 hover:bg-green-700 transition">İŞLETMEYİ KAYDET</button>
+                    <p class="text-[9px] text-gray-400 font-bold italic">* Sadece işletme sahipleri buradan kayıt olmalıdır.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="mainSection" class="hidden max-w-7xl mx-auto p-4 lg:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
         
-        # Ürünler tablosu (isletme_id ile ayrıştırılmış)
-        self.cursor.execute('''
-            CREATE TABLE IF NOT EXISTS urunler (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                isletme_id INTEGER,
-                urun_adi TEXT,
-                stok_miktari INTEGER,
-                fiyat REAL,
-                FOREIGN KEY (isletme_id) REFERENCES isletmeler(id)
-            )
-        ''')
-        self.conn.commit()
+        <div class="lg:col-span-4 space-y-6">
+            <div class="akin-card p-6">
+                <h3 class="font-black text-gray-700 border-b pb-3 mb-5 text-xs uppercase tracking-widest">İlan Kayıt Formu</h3>
+                <div class="space-y-4">
+                    <select id="pKategori" class="w-full border-2 border-gray-50 p-3 rounded-xl bg-gray-50 font-bold text-gray-600 outline-none">
+                        <option value="🏠 Konut - Satılık">Konut - Satılık</option>
+                        <option value="🔑 Konut - Kiralık">Konut - Kiralık</option>
+                        <option value="🌳 Arsa - Satılık">Arsa - Satılık</option>
+                        <option value="🏬 İş Yeri - Ofis">İş Yeri - Ofis</option>
+                    </select>
+                    <input type="text" id="pBaslik" placeholder="İlan Başlığı" class="w-full border-2 border-gray-50 p-3 rounded-xl outline-none">
+                    <div class="grid grid-cols-2 gap-3">
+                        <input type="text" id="pIl" placeholder="İl" class="border-2 border-gray-50 p-3 rounded-xl outline-none">
+                        <input type="text" id="pIlce" placeholder="İlçe" class="border-2 border-gray-50 p-3 rounded-xl outline-none">
+                    </div>
+                    <input type="number" id="pFiyat" placeholder="Fiyat (₺)" class="w-full border-2 border-blue-50 p-3 rounded-xl font-black text-blue-600 text-xl outline-none">
+                    
+                    <div class="border-2 border-dashed border-blue-100 p-6 rounded-2xl bg-blue-50/30 text-center hover:bg-blue-50 cursor-pointer transition">
+                        <label class="cursor-pointer block">
+                            <span class="text-3xl block">📸</span>
+                            <span class="block text-[10px] font-black text-blue-600 mt-2">GÖRSEL EKLE (KAMERA/GALERİ)</span>
+                            <input type="file" id="pGorsel" multiple accept="image/*" class="hidden">
+                        </label>
+                        <div id="fileStatus" class="text-[10px] mt-1 text-gray-400 font-bold">Resim Seçilmedi</div>
+                    </div>
+                    <button onclick="saveIlan()" id="saveBtn" class="w-full bg-blue-600 text-white p-4 rounded-xl font-black shadow-lg hover:bg-blue-700 transition uppercase tracking-tighter">Portföye Gönder</button>
+                </div>
+            </div>
 
-    def urun_ekle(self, isletme_id, ad, stok, fiyat):
-        """Her ürün eklenirken mutlaka hangi işletmeye ait olduğu kaydedilir."""
-        query = "INSERT INTO urunler (isletme_id, urun_adi, stok_miktari, fiyat) VALUES (?, ?, ?, ?)"
-        self.cursor.execute(query, (isletme_id, ad, stok, fiyat))
-        self.conn.commit()
-        print(f"Sistem: '{ad}' ürünü {isletme_id} ID'li işletmeye eklendi.")
+            <div id="staffSection" class="hidden akin-card staff-box p-6">
+                <h3 class="font-black text-amber-600 border-b pb-3 mb-4 text-xs uppercase tracking-widest">Çalışan Tanımla (Patron Paneli)</h3>
+                <div class="space-y-3">
+                    <input type="email" id="sEmail" placeholder="Çalışanın E-postası" class="w-full border-2 border-gray-50 p-2.5 rounded-xl text-sm outline-none">
+                    <input type="text" id="sPass" placeholder="4 Haneli Giriş Kodu" maxlength="4" class="w-full border-2 border-gray-50 p-2.5 rounded-xl text-sm outline-none font-bold">
+                    <button onclick="addStaff()" class="w-full bg-amber-500 text-white p-3 rounded-xl font-black text-[10px] uppercase shadow-md hover:bg-amber-600 transition">Personel Hesabını Aktif Et</button>
+                </div>
+            </div>
+        </div>
 
-    def urunleri_getir(self, isletme_id):
-        """
-        KRİTİK NOKTA: Veri karışıklığını önleyen filtreleme.
-        Sorgu asla 'SELECT * FROM urunler' şeklinde çıplak bırakılmaz.
-        """
-        query = "SELECT urun_adi, stok_miktari, fiyat FROM urunler WHERE isletme_id = ?"
-        self.cursor.execute(query, (isletme_id,))
-        return self.cursor.fetchall()
+        <div class="lg:col-span-8">
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 min-h-screen">
+                <div class="flex justify-between items-center mb-8 border-b pb-4">
+                    <h2 class="font-black text-gray-800 text-sm tracking-widest">GÜNCEL İLAN AKIŞI</h2>
+                    <span id="totalCount" class="bg-blue-600 text-white text-[9px] px-3 py-1 rounded-full font-bold">0 İLAN</span>
+                </div>
+                <div id="listArea" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
+            </div>
+        </div>
+    </div>
+</div>
 
-# --- SİSTEMİ TEST EDELİM ---
+<script>
+    // --- BAĞLANTI AYARLARI ---
+    const SUPABASE_URL = "https://svugeytllwprshrftbmf.supabase.co";
+    const SUPABASE_KEY = "Sb_publishable_i2zuuZi8dZ-wN4b-aO5HVQ_fGUk2miT"; 
+    const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-ems = EMS_SaaS_Sistemi()
+    // --- PANEL GEÇİŞLERİ ---
+    function toggleAuth(isLogin) {
+        document.getElementById('loginForm').classList.toggle('hidden', !isLogin);
+        document.getElementById('registerForm').classList.toggle('hidden', isLogin);
+        document.getElementById('loginTab').className = isLogin ? "tab-btn flex-1 py-4 text-sm font-bold tab-active" : "tab-btn flex-1 py-4 text-sm font-bold text-gray-400";
+        document.getElementById('regTab').className = !isLogin ? "tab-btn flex-1 py-4 text-sm font-bold tab-active" : "tab-btn flex-1 py-4 text-sm font-bold text-gray-400";
+    }
 
-# 1. Senaryo: İki farklı işletme sisteme kaydoluyor
-# İşletme 1: Merkez Market (ID: 1)
-# İşletme 2: Teknik Servis (ID: 2)
+    // --- İŞLETME SAHİBİ KAYIT ---
+    async function register() {
+        const email = document.getElementById('regEmail').value;
+        const pass = document.getElementById('regPass').value;
+        const name = document.getElementById('regName').value;
+        if(!email || !pass || !name) return alert("Lütfen tüm alanları doldurun!");
 
-# 2. Senaryo: Her işletme kendi ürününü ekliyor
-ems.urun_ekle(1, "Süt", 50, 25.50)
-ems.urun_ekle(1, "Ekmek", 100, 10.00)
-ems.urun_ekle(2, "SSD Disk", 15, 1200.00)
+        const { data, error } = await _supabase.auth.signUp({ email, password: pass });
+        if (error) alert("Kayıt Hatası: " + error.message);
+        else {
+            await _supabase.from('personeller').insert([{ id: data.user.id, ad_soyad: name, email: email, yetki: 'sahip' }]);
+            alert("İşletme kaydı başarılı! Giriş yapabilirsiniz.");
+            location.reload();
+        }
+    }
 
-print("\n--- GÜVENLİK KONTROLÜ ---")
+    // --- GİRİŞ YAP ---
+    async function login() {
+        const email = document.getElementById('email').value;
+        const pass = document.getElementById('password').value;
+        const { error } = await _supabase.auth.signInWithPassword({ email, password: pass });
+        if (error) alert("Giriş yapılamadı. Bilgilerinizi kontrol edin.");
+        else location.reload();
+    }
 
-# İşletme 1 giriş yaptığında sadece kendi mallarını görür:
-market_verisi = ems.urunleri_getir(1)
-print(f"Merkez Market Ürünleri: {market_verisi}")
+    // --- OTURUM KONTROLÜ ---
+    async function checkUser() {
+        const { data: { user } } = await _supabase.auth.getUser();
+        if (user) {
+            document.getElementById('authSection').classList.add('hidden');
+            document.getElementById('mainSection').classList.remove('hidden');
+            document.getElementById('userInfo').classList.replace('hidden', 'flex');
+            document.getElementById('userEmail').innerText = user.email;
 
-# İşletme 2 giriş yaptığında asla marketin sütünü/ekmeğini göremez:
-servis_verisi = ems.urunleri_getir(2)
-print(f"Teknik Servis Ürünleri: {servis_verisi}")
+            // Yetki Kontrolü
+            const { data: prof } = await _supabase.from('personeller').select('yetki').eq('id', user.id).single();
+            if (prof && prof.yetki === 'sahip') {
+                document.getElementById('staffSection').classList.remove('hidden');
+            }
+            fetchListings();
+        }
+    }
+
+    // --- PERSONEL EKLE (4 Haneli Şifre) ---
+    async function addStaff() {
+        const email = document.getElementById('sEmail').value;
+        const pass = document.getElementById('sPass').value;
+        if(pass.length !== 4) return alert("Şifre 4 haneli olmalıdır!");
+
+        const { data, error } = await _supabase.auth.signUp({ email, password: pass });
+        if (error) alert("Personel eklenemedi: " + error.message);
+        else {
+            await _supabase.from('personeller').insert([{ id: data.user.id, email: email, yetki: 'personel' }]);
+            alert("Personel başarıyla tanımlandı! Giriş şifresi: " + pass);
+        }
+    }
+
+    // --- İLAN KAYDET ---
+    async function saveIlan() {
+        const btn = document.getElementById('saveBtn');
+        const files = document.getElementById('pGorsel').files;
+        if(files.length === 0) return alert("En az 1 resim eklemelisiniz!");
+
+        btn.innerText = "YÜKLENİYOR...";
+        btn.disabled = true;
+
+        const urls = [];
+        for (let file of files) {
+            const comp = await imageCompression(file, { maxSizeMB: 0.15 });
+            const name = `${Date.now()}-${Math.random().toString(36).substr(2, 4)}.jpg`;
+            const { data } = await _supabase.storage.from('portfoy-gorselleri').upload(name, comp);
+            if (data) urls.push(data.path);
+        }
+
+        await _supabase.from('ilanlar').insert([{
+            baslik: document.getElementById('pBaslik').value,
+            kategori: document.getElementById('pKategori').value,
+            il: document.getElementById('pIl').value,
+            ilce: document.getElementById('pIlce').value,
+            fiyat: document.getElementById('pFiyat').value,
+            gorsel_linkleri: urls,
+            ekleyen_personel_ad: document.getElementById('userEmail').innerText
+        }]);
+
+        location.reload();
+    }
+
+    // --- LİSTELE ---
+    async function fetchListings() {
+        const { data } = await _supabase.from('ilanlar').select('*').order('created_at', { ascending: false });
+        document.getElementById('totalCount').innerText = `${data ? data.length : 0} İLAN`;
+        const list = document.getElementById('listArea');
+        list.innerHTML = data.map(i => `
+            <div class="bg-white rounded-2xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-md transition">
+                <div class="h-48 bg-cover bg-center" style="background-image: url('${SUPABASE_URL}/storage/v1/object/public/portfoy-gorselleri/${i.gorsel_linkleri[0]}')"></div>
+                <div class="p-4">
+                    <span class="text-[9px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-lg font-black uppercase tracking-tighter border border-blue-100">${i.kategori}</span>
+                    <h4 class="font-bold text-gray-800 text-sm mt-2 truncate uppercase italic">${i.baslik}</h4>
+                    <p class="text-blue-600 font-black text-xl mt-1 tracking-tighter">${Number(i.fiyat).toLocaleString()} ₺</p>
+                    <div class="flex justify-between items-center mt-4 pt-3 border-t border-gray-50">
+                        <span class="text-[9px] font-bold text-gray-300 italic uppercase">👤 ${i.ekleyen_personel_ad.split('@')[0]}</span>
+                        <span class="text-[9px] font-bold text-gray-400">${i.ilce}</span>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async function logout() { await _supabase.auth.signOut(); location.reload(); }
+    window.onload = checkUser;
+    document.getElementById('pGorsel').onchange = function() {
+        document.getElementById('fileStatus').innerText = this.files.length + " GÖRSEL SEÇİLDİ ✅";
+    };
+</script>
+</body>
+</html>

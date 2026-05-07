@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emlak Portföy Yönetim Sistemi</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/browser-image-compression/2.0.2/browser-image-compression.min.js"></script>
+    <style>
+        body { background-color: #f4f7f9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .akin-card { background: white; border-top: 4px solid #0056b3; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .btn-akin { background-color: #0056b3; color: white; transition: 0.3s; }
+        .btn-akin:hover { background-color: #004494; }
+        .sidebar { background-color: #ffffff; border-right: 1px solid #dee2e6; }
+    </style>
+</head>
+<body>
+
+<div id="app" class="min-h-screen flex flex-col">
+    <nav class="bg-white border-b p-4 flex justify-between items-center shadow-sm">
+        <h1 class="text-xl font-bold text-blue-800">EMLAK PORTFÖY <span class="text-gray-400 text-sm font-normal">v1.0</span></h1>
+        <div id="userInfo" class="hidden text-sm text-gray-600">
+            <span id="userEmail" class="font-semibold italic"></span> | 
+            <button onclick="logout()" class="text-red-500 underline ml-2">Çıkış Yap</button>
+        </div>
+    </nav>
+
+    <div class="flex flex-1">
+        <div id="loginSection" class="w-full flex items-center justify-center p-6">
+            <div class="akin-card p-8 w-full max-w-md">
+                <h2 class="text-2xl font-bold mb-6 text-center text-gray-700">Sisteme Giriş Yap</h2>
+                <input type="email" id="loginEmail" placeholder="E-posta Adresi" class="w-full border p-3 rounded mb-4 outline-none focus:border-blue-500">
+                <input type="password" id="loginPass" placeholder="Şifre" class="w-full border p-3 rounded mb-6 outline-none focus:border-blue-500">
+                <button onclick="login()" class="w-full btn-akin p-3 rounded font-bold uppercase">Giriş Yap</button>
+            </div>
+        </div>
+
+        <div id="mainSection" class="hidden w-full p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+            
+            <div class="md:col-span-1">
+                <div class="akin-card p-6">
+                    <h3 class="font-bold border-b pb-2 mb-4 text-blue-800 uppercase tracking-wider">Yeni Gayrimenkul Ekle</h3>
+                    <div class="space-y-4">
+                        <input type="text" id="pBaslik" placeholder="İlan Başlığı (Örn: Satılık 3+1)" class="w-full border p-2 rounded">
+                        <div class="grid grid-cols-2 gap-2">
+                            <input type="text" id="pIl" placeholder="İl" class="border p-2 rounded">
+                            <input type="text" id="pIlce" placeholder="İlçe" class="border p-2 rounded">
+                        </div>
+                        <input type="text" id="pAdres" placeholder="Tam Adres Bilgisi" class="w-full border p-2 rounded">
+                        <input type="number" id="pFiyat" placeholder="Fiyat (TL)" class="w-full border p-2 rounded">
+                        
+                        <div class="border-2 border-dashed border-gray-200 p-4 rounded text-center">
+                            <label class="cursor-pointer text-blue-600 font-semibold">
+                                📷 Fotoğraf Çek / Yükle
+                                <input type="file" id="pGorsel" multiple accept="image/*" class="hidden">
+                            </label>
+                            <div id="fileInfo" class="text-xs text-gray-500 mt-1 italic">Sistem otomatik sıkıştırma yapacaktır.</div>
+                        </div>
+                        
+                        <button onclick="ilanKaydet()" class="w-full btn-akin p-3 rounded font-bold">PORTFÖYE EKLE</button>
+                    </div>
+                </div>
+
+                <div id="adminPanel" class="mt-6 akin-card p-6 hidden">
+                    <h3 class="font-bold border-b pb-2 mb-4 text-orange-600 uppercase">Yönetici: Personel Yönetimi</h3>
+                    <div class="space-y-3">
+                        <input type="text" id="staffName" placeholder="Ad Soyad (Zorunlu)" class="w-full border p-2 rounded text-sm">
+                        <input type="email" id="staffEmail" placeholder="E-posta (Zorunlu)" class="w-full border p-2 rounded text-sm">
+                        <button onclick="personelEkle()" class="w-full bg-orange-500 text-white p-2 rounded text-sm hover:bg-orange-600">PERSONELİ YETKİLENDİR</button>
+                        <p class="text-[10px] text-gray-400">* Maksimum 12 personel eklenebilir.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="md:col-span-2">
+                <div class="akin-card p-6 min-h-[500px]">
+                    <h3 class="font-bold border-b pb-2 mb-4 text-blue-800 uppercase tracking-wider">Güncel Portföy Listesi</h3>
+                    <div id="ilanListesi" class="space-y-4">
+                        </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- SUPABASE BAĞLANTISI ---
+    const SUPABASE_URL = "https://svugeytllwprshrftbmf.supabase.co";
+    const SUPABASE_KEY = "BURAYA_ANON_PUBLIC_KEY_GELECEK"; // Sana ait olan o uzun key'i buraya yapıştır
+    const supabase = lib.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    let currentUser = null;
+
+    // --- GİRİŞ İŞLEMLERİ ---
+    async function login() {
+        const email = document.getElementById('loginEmail').value;
+        const pass = document.getElementById('loginPass').value;
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
+        if (error) alert("Giriş başarısız: " + error.message);
+        else checkSession();
+    }
+
+    async function checkSession() {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+            currentUser = session.user;
+            document.getElementById('loginSection').classList.add('hidden');
+            document.getElementById('mainSection').classList.remove('hidden');
+            document.getElementById('userInfo').classList.remove('hidden');
+            document.getElementById('userEmail').innerText = currentUser.email;
+            
+            // Eğer yöneticiyse personel panelini göster (Örn: Senin mailin)
+            if(currentUser.email === 'admin@mail.com') { 
+                document.getElementById('adminPanel').classList.remove('hidden');
+            }
+            ilanlariGetir();
+        }
+    }
+
+    // --- GÖRSEL SIKIŞTIRMA VE KAYIT ---
+    async function ilanKaydet() {
+        const gorselFiles = document.getElementById('pGorsel').files;
+        const gorselUrller = [];
+
+        // 1. Görselleri sıkıştır ve yükle
+        for (let file of gorselFiles) {
+            const options = { maxSizeMB: 0.2, maxWidthOrHeight: 1280 };
+            const compressedFile = await imageCompression(file, options);
+            
+            const fileName = `${Date.now()}-${file.name}`;
+            const { data, error } = await supabase.storage.from('portfoy-gorselleri').upload(fileName, compressedFile);
+            if (data) gorselUrller.push(data.path);
+        }
+
+        // 2. Veritabanına kaydet
+        const { error } = await supabase.from('ilanlar').insert([{
+            baslik: document.getElementById('pBaslik').value,
+            il: document.getElementById('pIl').value,
+            ilce: document.getElementById('pIlce').value,
+            tam_adres: document.getElementById('pAdres').value,
+            fiyat: document.getElementById('pFiyat').value,
+            gorsel_linkleri: gorselUrller,
+            ekleyen_personel_ad: currentUser.email // E-posta otomatik görünür
+        }]);
+
+        if (error) alert("Hata: " + error.message);
+        else { alert("İlan başarıyla eklendi!"); ilanlariGetir(); }
+    }
+
+    async function ilanlariGetir() {
+        const { data } = await supabase.from('ilanlar').select('*').order('created_at', { ascending: false });
+        const liste = document.getElementById('ilanListesi');
+        liste.innerHTML = data.map(ilan => `
+            <div class="flex border p-3 rounded hover:bg-gray-50 transition">
+                <div class="w-24 h-24 bg-gray-200 rounded flex-shrink-0 bg-cover" style="background-image: url('${SUPABASE_URL}/storage/v1/object/public/portfoy-gorselleri/${ilan.gorsel_linkleri[0] || ''}')"></div>
+                <div class="ml-4 flex-1">
+                    <div class="flex justify-between font-bold text-blue-900">
+                        <span>${ilan.baslik}</span>
+                        <span>${Number(ilan.fiyat).toLocaleString()} TL</span>
+                    </div>
+                    <div class="text-xs text-gray-500 italic">${ilan.il} / ${ilan.ilce} - ${ilan.tam_adres}</div>
+                    <div class="mt-2 text-[11px] font-semibold text-gray-400 uppercase">Ekleyen: ${ilan.ekleyen_personel_ad}</div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async function logout() {
+        await supabase.auth.signOut();
+        location.reload();
+    }
+
+    window.onload = checkSession;
+</script>
+
+</body>
+</html>

@@ -80,7 +80,7 @@
 </div>
 
 <script>
-    // --- BAĞLANTI AYARLARI ---
+    // --- BAĞLANTI AYARLARI (KONTROL EDİLDİ) ---
     const S_URL = "https://svugeytllwprshrftbmf.supabase.co";
     const S_KEY = "EyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN2dWdleXRsbHdwcnNocmZ0Ym1mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxODEwMzQsImV4cCI6MjA5Mzc1NzAzNH0.J4dIjHP4oOr-OW4bNPEFqtnX0DSSyPItGMfH9RgR79A"; 
     const _db = supabase.createClient(S_URL, S_KEY);
@@ -96,8 +96,9 @@
         const email = document.getElementById('regEmail').value;
         const pass = document.getElementById('regPass').value;
         const name = document.getElementById('regName').value;
+        if(!email || !pass) return alert("Bilgileri doldurun!");
         const { data, error } = await _db.auth.signUp({ email, password: pass });
-        if (error) alert(error.message);
+        if (error) alert("Kayıt Hatası: " + error.message);
         else {
             await _db.from('personeller').insert([{ id: data.user.id, ad_soyad: name, email: email, yetki: 'sahip' }]);
             alert("İşletme kaydı başarılı! Giriş yapabilirsiniz.");
@@ -109,7 +110,7 @@
         const email = document.getElementById('email').value;
         const pass = document.getElementById('password').value;
         const { error } = await _db.auth.signInWithPassword({ email, password: pass });
-        if (error) alert("Giriş başarısız. Bilgileri kontrol edin.");
+        if (error) alert("Giriş Hatası: " + error.message);
         else location.reload();
     }
 
@@ -127,17 +128,6 @@
         }
     }
 
-    async function addStaff() {
-        const email = document.getElementById('sEmail').value;
-        const pass = document.getElementById('sPass').value;
-        const { data, error } = await _db.auth.signUp({ email, password: pass });
-        if (error) alert("Hata: " + error.message);
-        else {
-            await _db.from('personeller').insert([{ id: data.user.id, email: email, yetki: 'personel' }]);
-            alert("Personel tanımlandı! Giriş kodu: " + pass);
-        }
-    }
-
     async function saveIlan() {
         const btn = document.getElementById('saveBtn');
         const files = document.getElementById('pGorsel').files;
@@ -145,24 +135,32 @@
         btn.innerText = "YÜKLENİYOR...";
         btn.disabled = true;
         const urls = [];
-        for (let f of files) {
-            const comp = await imageCompression(f, { maxSizeMB: 0.1 });
-            const path = `${Date.now()}-${Math.random().toString(36).substr(2, 4)}.jpg`;
-            const { data } = await _db.storage.from('portfoy-gorselleri').upload(path, comp);
-            if (data) urls.push(data.path);
+        try {
+            for (let f of files) {
+                const comp = await imageCompression(f, { maxSizeMB: 0.1 });
+                const path = `${Date.now()}-${Math.random().toString(36).substr(2, 4)}.jpg`;
+                const { data, error } = await _db.storage.from('portfoy-gorselleri').upload(path, comp);
+                if (error) throw error;
+                if (data) urls.push(data.path);
+            }
+            await _db.from('ilanlar').insert([{
+                baslik: document.getElementById('pBaslik').value,
+                fiyat: document.getElementById('pFiyat').value,
+                gorsel_linkleri: urls,
+                ekleyen_personel_ad: document.getElementById('userEmail').innerText
+            }]);
+            location.reload();
+        } catch (e) {
+            alert("Yükleme hatası: " + e.message);
+            btn.innerText = "Portföye Ekle";
+            btn.disabled = false;
         }
-        await _db.from('ilanlar').insert([{
-            baslik: document.getElementById('pBaslik').value,
-            fiyat: document.getElementById('pFiyat').value,
-            gorsel_linkleri: urls,
-            ekleyen_personel_ad: document.getElementById('userEmail').innerText
-        }]);
-        location.reload();
     }
 
     async function fetchListings() {
         const { data } = await _db.from('ilanlar').select('*').order('created_at', { ascending: false });
         const list = document.getElementById('listArea');
+        if(!data) return;
         list.innerHTML = data.map(i => `
             <div class="bg-white rounded-xl overflow-hidden border border-gray-100 shadow-sm">
                 <div class="h-40 bg-cover bg-center" style="background-image: url('${S_URL}/storage/v1/object/public/portfoy-gorselleri/${i.gorsel_linkleri[0]}')"></div>
